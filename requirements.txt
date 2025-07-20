@@ -1,0 +1,11 @@
+torch
+torchvision
+pyyaml
+tqdm
+albumentations
+numpy
+scikit-learn
+tensorboard
+opencv-python
+dlib
+face_recognition

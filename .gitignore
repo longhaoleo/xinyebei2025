@@ -1,0 +1,4 @@
+# .gitignore for xinyebei project
+*.vscode*
+data
+Dockerfile
