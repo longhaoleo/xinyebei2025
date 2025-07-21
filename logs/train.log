@@ -1,0 +1,8 @@
+2025-07-21 11:52:40,578 - INFO - Using device: cuda
+2025-07-21 11:57:33,989 - INFO - Using device: cuda
+2025-07-21 11:58:27,197 - INFO - Using device: cuda
+2025-07-21 11:59:32,282 - INFO - Using device: cuda
+2025-07-21 12:00:29,967 - INFO - Using device: cuda
+2025-07-21 12:01:53,715 - INFO - Using device: cuda
+2025-07-21 12:01:55,970 - INFO - Loading pretrained weights from Hugging Face hub (timm/efficientnet_b4.ra2_in1k)
+2025-07-21 12:04:22,512 - INFO - Using device: cuda

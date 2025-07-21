@@ -7,18 +7,18 @@ from .backbone import get_backbone
 class GradientReversalLayer(Function):
     """梯度反转层（GRL）的实现
 
-    在前向传播中，它是一个恒等变换。
+    在前向传播中，它是一个恒等变换，不改变任何值。
     在反向传播中，它将输入的梯度乘以一个负的常数 alpha，从而反转梯度的方向。
     这在对抗训练中非常有用，例如在领域自适应或移除敏感信息（如身份）时，
-    可以最大化身份分类器的损失，同时最小化主任务的损失。
+    可以最大化身份分类器的损失，从而迫使特征提取器学习与身份无关的特征。
     """
     @staticmethod
     def forward(ctx, x, alpha):
         """前向传播
         Args:
-            ctx: 上下文对象，用于存储反向传播所需的信息
-            x: 输入张量
-            alpha: 梯度缩放因子
+            ctx: 上下文对象，用于存储反向传播所需的信息。
+            x: 输入张量。
+            alpha: 梯度缩放因子。
         """
         # 保存 alpha 值以供反向传播使用
         ctx.alpha = alpha
@@ -29,10 +29,10 @@ class GradientReversalLayer(Function):
     def backward(ctx, grad_output):
         """反向传播
         Args:
-            ctx: 上下文对象
-            grad_output: 来自后续层的梯度
+            ctx: 上下文对象，从中获取保存的alpha。
+            grad_output: 来自后续层的梯度。
         Returns:
-            tuple: (反转后的梯度, None)，None对应于alpha参数，它不需要梯度
+            tuple: (反转后的梯度, None)，None对应于alpha参数，它不需要梯度。
         """
         # 将梯度取反，并乘以 alpha 进行缩放
         output = grad_output.neg() * ctx.alpha
@@ -42,13 +42,13 @@ class FreqBranch(nn.Module):
     """频域分支的轻量级CNN
 
     用于从频域表示（如FFT幅度谱）中提取特征。
-    通常频域图的结构比空间域图像更简单，因此可以使用一个较浅的网络。
+    通常频域图的结构比空间域图像更简单，因此可以使用一个较浅的网络来有效提取模式。
     """
-    def __init__(self, in_channels=1, out_features=512):
+    def __init__(self, in_channels=3, out_features=512):
         """初始化频域分支
         Args:
-            in_channels (int): 输入通道数（频域图通常是单通道）
-            out_features (int): 输出特征维度
+            in_channels (int): 输入通道数（频域图通常是单通道，但可以复制为3通道以匹配预训练模型）。
+            out_features (int): 输出特征维度。
         """
         super().__init__()
         self.conv_layers = nn.Sequential(
@@ -62,9 +62,9 @@ class FreqBranch(nn.Module):
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),
         )
-        # 自适应平均池化层，将特征图降维到1x1
+        # 自适应平均池化层，将任意大小的特征图降维到1x1
         self.adaptive_pool = nn.AdaptiveAvgPool2d((1, 1))
-        # 全连接层，将特征向量映射到指定维度
+        # 全连接层，将特征向量映射到指定的输出维度
         self.fc = nn.Linear(256, out_features)
 
     def forward(self, x):
@@ -78,12 +78,12 @@ class ComprehensiveModel(nn.Module):
     """综合模型
 
     集成了空域-频域双流结构，并包含一个身份抑制分支。
-    1.  **空间主干 (Spatial Backbone)**: 使用强大的预训练网络（如ResNet）提取图像的深层语义特征。
-    2.  **频域分支 (Frequency Branch)**: 使用一个轻量级CNN处理频域输入，捕捉伪造痕迹。
-    3.  **特征融合 (Feature Fusion)**: 将空间和频率特征拼接并融合，以供最终分类。
-    4.  **分类头 (Classification Head)**: 对融合后的特征进行二分类（真/假）。
+    1.  **空间主干 (Spatial Backbone)**: 使用强大的预训练网络（如ResNet）提取图像的深层语义特征，这些特征对伪造检测至关重要。
+    2.  **频域分支 (Frequency Branch)**: 使用一个轻量级CNN处理频域输入，专门捕捉由伪造（如DCT系数异常）引入的频域痕迹。
+    3.  **特征融合 (Feature Fusion)**: 将空间和频率特征拼接并融合，结合两种模态的信息以供最终分类。
+    4.  **分类头 (Classification Head)**: 对融合后的特征进行二分类（真实/伪造）。
     5.  **身份抑制分支 (Identity Suppression Branch)**: 对空间特征进行身份分类，但通过GRL层反转梯度，
-        迫使空间主干学习与身份无关的特征。
+        这会惩罚那些对身份信息敏感的特征，迫使空间主干学习与身份无关的、更通用的伪造特征。
     """
     def __init__(self, backbone_name='resnet50', pretrained=True, num_classes=1, num_identities=1000):
         super().__init__()
@@ -91,7 +91,7 @@ class ComprehensiveModel(nn.Module):
         self.spatial_backbone = get_backbone(backbone_name, pretrained)
         # 获取主干网络的输出特征维度
         backbone_out_features = self.spatial_backbone.fc.in_features
-        # 移除原始分类器，我们只使用特征提取部分
+        # 移除原始分类器，我们只把它当作特征提取器
         self.spatial_backbone.fc = nn.Identity()
 
         # 2. 频域分支
@@ -104,7 +104,7 @@ class ComprehensiveModel(nn.Module):
         self.fusion_fc = nn.Sequential(
             nn.Linear(fusion_in_features, 512),
             nn.ReLU(),
-            nn.Dropout(0.5) # 使用Dropout防止过拟合
+            nn.Dropout(0.5) # 使用Dropout防止在融合层过拟合
         )
 
         # 4. 分类判别头 (真/假)
@@ -120,11 +120,11 @@ class ComprehensiveModel(nn.Module):
     def forward(self, x_spatial, x_freq, grl_alpha=1.0):
         """模型的前向传播
         Args:
-            x_spatial (torch.Tensor): 空间域的输入图像张量
-            x_freq (torch.Tensor): 频域的输入图像张量
-            grl_alpha (float): GRL层的梯度缩放因子
+            x_spatial (torch.Tensor): 空间域的输入图像张量。
+            x_freq (torch.Tensor): 频域的输入图像张量。
+            grl_alpha (float): GRL层的梯度缩放因子，用于控制梯度反转的强度。
         Returns:
-            tuple: (伪造分类logits, 身份分类logits, 空间特征, 频率特征)
+            tuple: (伪造分类logits, 身份分类logits, 空间特征, 频率特征)，返回多个输出用于计算不同的损失。
         """
         # 空间流：提取空间特征
         spatial_features = self.spatial_backbone(x_spatial)
@@ -132,7 +132,7 @@ class ComprehensiveModel(nn.Module):
         # 频率流：提取频率特征
         freq_features = self.freq_branch(x_freq)
 
-        # 特征融合
+        # 特征融合：将两种特征在维度上拼接起来
         fused_features = torch.cat((spatial_features, freq_features), dim=1)
         fused_features = self.fusion_fc(fused_features)
 

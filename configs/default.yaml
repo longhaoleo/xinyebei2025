@@ -1,17 +1,22 @@
-# Data paths
 data:
-  train_dir: /path/to/train/data
-  val_dir: /path/to/val/data
-  test_dir: /path/to/test/data
-  # lmdb_path: /path/to/lmdb
+  all_annotations_txt: 'data/train.txt'
+  # path to folder with frames extracted from videos
+  data_folder: 'data/'
+  # mean and std for normalization
+  mean: [0.485, 0.456, 0.406]
+  # Ratio of the dataset to be used for validation
+  val_split_ratio: 0.2
+  # Number of workers for data loading
+  num_workers: 4
 
-# Model selection
 model:
-  name: 'dual_stream' # or 'id_unaware'
-  backbone: 'efficientnet-b4' # or 'resnet50', 'vit'
-  pretrained: true
+  name: 'dual_stream'
+  backbone: 'resnet50' # Changed from efficientnet-b4
+  num_classes: 2
+  # Set to 1 because we are using a default identity ID
+  num_identities: 1 
+  pretrained: True
 
-# Training parameters
 train:
   batch_size: 32
   epochs: 50
